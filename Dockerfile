@@ -4,7 +4,7 @@ FROM python:3.10-slim
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DISPLAY=:99
 
-# Install system dependencies, Google Chrome stable, XVFB, VNC, noVNC, and supervisor
+# Install system dependencies, XVFB, VNC, noVNC, and supervisor
 RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
@@ -22,11 +22,11 @@ RUN apt-get update && apt-get install -y \
     libgtk-3-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Google Chrome stable (required for DrissionPage)
-RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
-    && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list \
+# Install Google Chrome stable via direct deb package (bypasses deprecated apt-key)
+RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
     && apt-get update \
-    && apt-get install -y google-chrome-stable \
+    && apt-get install -y ./google-chrome-stable_current_amd64.deb \
+    && rm google-chrome-stable_current_amd64.deb \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
