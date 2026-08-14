@@ -15,7 +15,6 @@ RUN apt-get update && apt-get install -y \
     websockify \
     supervisor \
     libxi6 \
-    libgconf-2-4 \
     libnss3 \
     libxss1 \
     libasound2 \
