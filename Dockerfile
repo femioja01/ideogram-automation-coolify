@@ -1,0 +1,49 @@
+FROM python:3.10-slim
+
+# Prevent interactive prompts during apt install
+ENV DEBIAN_FRONTEND=noninteractive
+ENV DISPLAY=:99
+
+# Install system dependencies, Google Chrome stable, XVFB, VNC, noVNC, and supervisor
+RUN apt-get update && apt-get install -y \
+    wget \
+    gnupg \
+    unzip \
+    xvfb \
+    x11vnc \
+    novnc \
+    websockify \
+    supervisor \
+    libxi6 \
+    libgconf-2-4 \
+    libnss3 \
+    libxss1 \
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libgtk-3-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Google Chrome stable (required for DrissionPage)
+RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
+    && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list \
+    && apt-get update \
+    && apt-get install -y google-chrome-stable \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy dependencies list and install python packages
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy source code and supervisord config
+COPY . .
+
+# Create required directories
+RUN mkdir -p /app/chrome_profile /app/output_images /app/temp_downloads /var/log/supervisor
+
+# Expose FastAPI Web App (8000) and noVNC Live Stream (6080)
+EXPOSE 8000 6080
+
+# Launch supervisord to manage display server, VNC stream, and web dashboard
+CMD ["/usr/bin/supervisord", "-c", "/app/supervisord.conf"]

@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  ideogram-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ideogram-automation
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+      - "6080:6080"
+    environment:
+      - REPLICATE_API_TOKEN=${REPLICATE_API_TOKEN}
+      - OUTPUT_DIR=${OUTPUT_DIR:-output_images}
+      - BASIC_AUTH_USERNAME=${BASIC_AUTH_USERNAME:-}
+      - BASIC_AUTH_PASSWORD=${BASIC_AUTH_PASSWORD:-}
+    volumes:
+      - chrome_profile_data:/app/chrome_profile
+      - output_images_data:/app/output_images
+      - prompts_data:/app/prompts_data
+
+volumes:
+  chrome_profile_data:
+  output_images_data:
+  prompts_data:
