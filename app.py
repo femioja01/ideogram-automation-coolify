@@ -136,10 +136,7 @@ async def startup_event():
 
 @app.get("/", response_class=HTMLResponse)
 async def get_index(request: Request, authenticated: bool = Depends(check_auth)):
-    return templates.TemplateResponse("index.html", {
-        "request": request,
-        "vnc_port": 6080
-    })
+    return templates.TemplateResponse(request=request, name="index.html", context={"vnc_port": 6080})
 
 @app.get("/api/status")
 async def get_status(authenticated: bool = Depends(check_auth)):
