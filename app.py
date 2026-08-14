@@ -123,6 +123,13 @@ class PromptDeleteRequest(BaseModel):
 class SingleRunRequest(BaseModel):
     id: int
 
+class SettingsUpdateRequest(BaseModel):
+    REPLICATE_API_TOKEN: Optional[str] = None
+    SCORE_THRESHOLD: Optional[int] = None
+    MAX_RETRIES: Optional[int] = None
+    CLIPROXY_API_KEY: Optional[str] = None
+    OPENAI_API_KEY: Optional[str] = None
+
 @app.on_event("startup")
 async def startup_event():
     state.loop = asyncio.get_running_loop()
@@ -150,6 +157,17 @@ async def get_status(authenticated: bool = Depends(check_auth)):
         "pending_count": pending_count,
         "image_count": len(images)
     }
+
+@app.get("/api/settings")
+async def get_settings(authenticated: bool = Depends(check_auth)):
+    return engine.load_settings()
+
+@app.post("/api/settings")
+async def update_settings(req: SettingsUpdateRequest, authenticated: bool = Depends(check_auth)):
+    updates = req.dict(exclude_unset=True)
+    saved = engine.save_settings(updates)
+    broadcast_log("[SYSTEM] Application settings updated.")
+    return {"success": True, "settings": saved}
 
 @app.get("/api/prompts")
 async def get_prompts(authenticated: bool = Depends(check_auth)):

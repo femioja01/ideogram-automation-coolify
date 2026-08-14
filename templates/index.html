@@ -29,6 +29,7 @@
             <button class="nav-btn" data-tab="tab-vnc"><span class="icon">🖥️</span> Live Browser Screen</button>
             <button class="nav-btn" data-tab="tab-prompts"><span class="icon">📝</span> Prompts Manager</button>
             <button class="nav-btn" data-tab="tab-gallery"><span class="icon">🖼️</span> Image Gallery</button>
+            <button class="nav-btn" data-tab="tab-settings"><span class="icon">⚙️</span> App Settings</button>
         </nav>
 
         <main class="main-content">
@@ -128,6 +129,43 @@
                 </div>
                 <div id="gallery-grid" class="gallery-grid">
                     <div class="empty-state card">Loading image gallery...</div>
+                </div>
+            </section>
+
+            <section id="tab-settings" class="tab-pane">
+                <div class="card settings-card">
+                    <h3>Application & API Settings</h3>
+                    <p class="subtitle" style="margin-bottom: 20px;">Configure your API keys and scoring options. Settings persist automatically across runs.</p>
+                    
+                    <form id="settings-form" class="settings-form">
+                        <div class="form-group">
+                            <label for="setting-replicate-token">Replicate API Token (`REPLICATE_API_TOKEN`)</label>
+                            <div class="input-with-button">
+                                <input type="password" id="setting-replicate-token" placeholder="r8_********************************">
+                                <button type="button" id="btn-toggle-token" class="btn btn-secondary btn-sm">Show</button>
+                            </div>
+                            <span class="field-hint">Required for scoring images with Replicate GPT-4o-Mini vision model.</span>
+                        </div>
+
+                        <div class="form-grid-2">
+                            <div class="form-group">
+                                <label for="setting-score-threshold">Score Threshold (1-10)</label>
+                                <input type="number" id="setting-score-threshold" min="1" max="10" value="6">
+                                <span class="field-hint">Minimum score required to accept an image. Default: 6</span>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="setting-max-retries">Max Retries per Prompt</label>
+                                <input type="number" id="setting-max-retries" min="1" max="5" value="2">
+                                <span class="field-hint">How many times to regenerate if images score below threshold. Default: 2</span>
+                            </div>
+                        </div>
+
+                        <div class="form-actions" style="margin-top: 24px;">
+                            <button type="submit" class="btn btn-primary">Save Settings</button>
+                            <span id="settings-toast" class="toast-msg"></span>
+                        </div>
+                    </form>
                 </div>
             </section>
         </main>

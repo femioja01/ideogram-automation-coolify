@@ -23,6 +23,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const tableBody = document.getElementById('prompts-table-body');
     const filterButtons = document.querySelectorAll('.filter-btn');
     const galleryGrid = document.getElementById('gallery-grid');
+    
+    const settingsForm = document.getElementById('settings-form');
+    const inputReplicateToken = document.getElementById('setting-replicate-token');
+    const btnToggleToken = document.getElementById('btn-toggle-token');
+    const inputScoreThreshold = document.getElementById('setting-score-threshold');
+    const inputMaxRetries = document.getElementById('setting-max-retries');
+    const settingsToast = document.getElementById('settings-toast');
 
     let currentFilter = 'all';
     let promptsData = [];
@@ -36,6 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById(targetTab).classList.add('active');
             if (targetTab === 'tab-prompts') loadPrompts();
             if (targetTab === 'tab-gallery') loadGallery();
+            if (targetTab === 'tab-settings') loadSettings();
         });
     });
 
@@ -287,6 +295,51 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) {
             console.error('Gallery fetch error:', e);
         }
+    }
+
+    async function loadSettings() {
+        try {
+            const res = await fetch('/api/settings');
+            if (!res.ok) return;
+            const data = await res.json();
+            if (inputReplicateToken) inputReplicateToken.value = data.REPLICATE_API_TOKEN || '';
+            if (inputScoreThreshold) inputScoreThreshold.value = data.SCORE_THRESHOLD || 6;
+            if (inputMaxRetries) inputMaxRetries.value = data.MAX_RETRIES || 2;
+        } catch (e) {
+            console.error('Error loading settings:', e);
+        }
+    }
+
+    if (btnToggleToken) {
+        btnToggleToken.addEventListener('click', () => {
+            if (inputReplicateToken.type === 'password') {
+                inputReplicateToken.type = 'text';
+                btnToggleToken.textContent = 'Hide';
+            } else {
+                inputReplicateToken.type = 'password';
+                btnToggleToken.textContent = 'Show';
+            }
+        });
+    }
+
+    if (settingsForm) {
+        settingsForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const payload = {
+                REPLICATE_API_TOKEN: inputReplicateToken.value.trim(),
+                SCORE_THRESHOLD: parseInt(inputScoreThreshold.value) || 6,
+                MAX_RETRIES: parseInt(inputMaxRetries.value) || 2
+            };
+            const res = await fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (res.ok) {
+                settingsToast.textContent = '✓ Settings saved successfully!';
+                setTimeout(() => { settingsToast.textContent = ''; }, 4000);
+            }
+        });
     }
 
     function escapeHtml(str) {
