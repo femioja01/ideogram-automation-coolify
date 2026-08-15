@@ -1,38 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // Tab Navigation
     const navButtons = document.querySelectorAll('.nav-btn');
     const tabPanes = document.querySelectorAll('.tab-pane');
-    const statusBadge = document.getElementById('global-status-badge');
-    const statTotal = document.getElementById('stat-total');
-    const statDone = document.getElementById('stat-done');
-    const statPending = document.getElementById('stat-pending');
-    const statFailed = document.getElementById('stat-failed');
-    const statImages = document.getElementById('stat-images');
-    const btnRunBatch = document.getElementById('btn-run-batch');
-    const btnStopBatch = document.getElementById('btn-stop-batch');
-    const btnResetFailed = document.getElementById('btn-reset-failed');
-    const btnLaunchLogin = document.getElementById('btn-launch-login');
-    const wsIndicator = document.getElementById('ws-indicator');
-    const terminalOutput = document.getElementById('terminal-output');
-    const btnClearLogs = document.getElementById('btn-clear-logs');
-    const chkAutoScroll = document.getElementById('chk-autoscroll');
-    const vncIframe = document.getElementById('vnc-iframe');
-    const vncDirectLink = document.getElementById('vnc-direct-link');
-    const btnRefreshVnc = document.getElementById('btn-refresh-vnc');
-    const addPromptForm = document.getElementById('add-prompt-form');
-    const inputNewPrompt = document.getElementById('input-new-prompt');
-    const tableBody = document.getElementById('prompts-table-body');
-    const filterButtons = document.querySelectorAll('.filter-btn');
-    const galleryGrid = document.getElementById('gallery-grid');
-    
-    const settingsForm = document.getElementById('settings-form');
-    const inputReplicateToken = document.getElementById('setting-replicate-token');
-    const btnToggleToken = document.getElementById('btn-toggle-token');
-    const inputScoreThreshold = document.getElementById('setting-score-threshold');
-    const inputMaxRetries = document.getElementById('setting-max-retries');
-    const settingsToast = document.getElementById('settings-toast');
-
-    let currentFilter = 'all';
-    let promptsData = [];
 
     navButtons.forEach(btn => {
         btn.addEventListener('click', () => {
@@ -41,108 +10,145 @@ document.addEventListener('DOMContentLoaded', () => {
             tabPanes.forEach(p => p.classList.remove('active'));
             btn.classList.add('active');
             document.getElementById(targetTab).classList.add('active');
+
             if (targetTab === 'tab-prompts') loadPrompts();
             if (targetTab === 'tab-gallery') loadGallery();
             if (targetTab === 'tab-settings') loadSettings();
         });
     });
 
-    const host = window.location.hostname || 'localhost';
-    const vncUrl = `http://${host}:6080/vnc.html?autoconnect=true&resize=scale`;
+    // Elements
+    const globalStatusBadge = document.getElementById('global-status-badge');
+    const statTotal = document.getElementById('stat-total');
+    const statDone = document.getElementById('stat-done');
+    const statPending = document.getElementById('stat-pending');
+    const statFailed = document.getElementById('stat-failed');
+    const statImages = document.getElementById('stat-images');
+
+    const btnRunBatch = document.getElementById('btn-run-batch');
+    const btnStopBatch = document.getElementById('btn-stop-batch');
+    const btnResetFailed = document.getElementById('btn-reset-failed');
+    const btnLaunchLogin = document.getElementById('btn-launch-login');
+    const btnClearLogs = document.getElementById('btn-clear-logs');
+    const chkAutoScroll = document.getElementById('chk-autoscroll');
+    const terminalOutput = document.getElementById('terminal-output');
+    const wsIndicator = document.getElementById('ws-indicator');
+
+    const vncIframe = document.getElementById('vnc-iframe');
+    const btnRefreshVnc = document.getElementById('btn-refresh-vnc');
+    const vncDirectLink = document.getElementById('vnc-direct-link');
+
+    const addPromptForm = document.getElementById('add-prompt-form');
+    const inputNewPrompt = document.getElementById('input-new-prompt');
+    const promptsTableBody = document.getElementById('prompts-table-body');
+    const filterButtons = document.querySelectorAll('.filter-btn');
+
+    const galleryGrid = document.getElementById('gallery-grid');
+    const settingsForm = document.getElementById('settings-form');
+    const inputReplicateToken = document.getElementById('setting-replicate-token');
+    const inputScoreThreshold = document.getElementById('setting-score-threshold');
+    const inputMaxRetries = document.getElementById('setting-max-retries');
+    const btnToggleToken = document.getElementById('btn-toggle-token');
+    const settingsToast = document.getElementById('settings-toast');
+
+    let currentFilter = 'all';
+    let promptsData = [];
+    let ws = null;
+
+    // Direct VNC link setup
+    const currentHost = window.location.hostname;
+    const vncUrl = `http://${currentHost}:6080/vnc.html?autoconnect=true`;
     if (vncDirectLink) vncDirectLink.href = vncUrl;
-    if (btnRefreshVnc) {
+
+    if (btnRefreshVnc && vncIframe) {
         btnRefreshVnc.addEventListener('click', () => {
-            if (vncIframe) vncIframe.src = vncUrl;
+            vncIframe.src = `/vnc.html?autoconnect=true&resize=scale&t=${Date.now()}`;
         });
     }
 
-    async function updateStatus() {
-        try {
-            const res = await fetch('/api/status');
-            if (!res.ok) return;
-            const data = await res.json();
-            statusBadge.textContent = data.status;
-            statusBadge.className = `status-pill ${data.status.toLowerCase()}`;
-            if (data.status === 'Running') {
-                btnRunBatch.disabled = true;
-                btnStopBatch.disabled = false;
-                btnLaunchLogin.disabled = true;
-            } else if (data.status === 'Stopping') {
-                btnRunBatch.disabled = true;
-                btnStopBatch.disabled = true;
-                btnLaunchLogin.disabled = true;
-            } else {
-                btnRunBatch.disabled = false;
-                btnStopBatch.disabled = true;
-                btnLaunchLogin.disabled = false;
-            }
-            statTotal.textContent = data.total_prompts;
-            statDone.textContent = data.done_count;
-            statPending.textContent = data.pending_count;
-            statFailed.textContent = data.failed_count;
-            statImages.textContent = data.image_count;
-        } catch (e) {
-            console.error('Status fetch error:', e);
-        }
-    }
-
-    setInterval(updateStatus, 3000);
-    updateStatus();
-
-    let ws = null;
+    // ── WebSocket Log Stream ──────────────────────────────────────────────────
     function connectWebSocket() {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${protocol}//${window.location.host}/ws/logs`;
+
         ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {
             wsIndicator.className = 'dot online';
-            appendLog('[SYSTEM] WebSocket connected to log stream.', 'system');
         };
 
         ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            if (data.type === 'history') {
-                terminalOutput.innerHTML = '';
-                data.logs.forEach(log => appendLog(log));
-            } else if (data.type === 'log') {
-                appendLog(data.message);
-            }
-            if (data.status) {
-                statusBadge.textContent = data.status;
-                statusBadge.className = `status-pill ${data.status.toLowerCase()}`;
+            try {
+                const data = JSON.parse(event.data);
+                if (data.type === 'history') {
+                    terminalOutput.innerHTML = '';
+                    data.logs.forEach(log => appendLog(log));
+                    updateStatusPill(data.status);
+                } else if (data.type === 'log') {
+                    appendLog(data.message);
+                    if (data.status) updateStatusPill(data.status);
+                }
+            } catch (e) {
+                appendLog(event.data);
             }
         };
 
         ws.onclose = () => {
             wsIndicator.className = 'dot offline';
-            setTimeout(connectWebSocket, 4000);
+            setTimeout(connectWebSocket, 3000);
         };
 
         ws.onerror = (err) => {
-            console.error('WebSocket error:', err);
-            ws.close();
+            wsIndicator.className = 'dot offline';
         };
     }
 
-    function appendLog(message, cls = '') {
+    function appendLog(text, type = 'normal') {
         const line = document.createElement('div');
-        line.className = `log-line ${cls}`;
-        if (message.includes('ERROR') || message.includes('Failed')) line.classList.add('error');
-        if (message.includes('Done!') || message.includes('Acceptable image found')) line.classList.add('success');
-        if (message.includes('[SYSTEM]')) line.classList.add('system');
-        line.textContent = message;
+        line.className = `log-line ${type}`;
+        line.textContent = text;
         terminalOutput.appendChild(line);
+
         if (chkAutoScroll.checked) {
             terminalOutput.scrollTop = terminalOutput.scrollHeight;
         }
     }
 
     btnClearLogs.addEventListener('click', () => {
-        terminalOutput.innerHTML = '<div class="log-line system">[SYSTEM] Terminal cleared.</div>';
+        terminalOutput.innerHTML = '<div class="log-line system">[SYSTEM] Terminal logs cleared.</div>';
     });
 
-    connectWebSocket();
+    // ── API Actions & Status Polling ─────────────────────────────────────────
+    async function updateStatus() {
+        try {
+            const res = await fetch('/api/status');
+            if (!res.ok) return;
+            const data = await res.json();
+
+            statTotal.textContent = data.total_prompts;
+            statDone.textContent = data.done_count;
+            statPending.textContent = data.pending_count;
+            statFailed.textContent = data.failed_count;
+            statImages.textContent = data.image_count;
+
+            updateStatusPill(data.status);
+
+            if (data.status === 'Running') {
+                btnRunBatch.disabled = true;
+                btnStopBatch.disabled = false;
+            } else {
+                btnRunBatch.disabled = false;
+                btnStopBatch.disabled = true;
+            }
+        } catch (e) {
+            console.error('Error fetching status:', e);
+        }
+    }
+
+    function updateStatusPill(status) {
+        globalStatusBadge.textContent = status;
+        globalStatusBadge.className = 'status-pill ' + (status ? status.toLowerCase() : 'idle');
+    }
 
     btnRunBatch.addEventListener('click', async () => {
         const res = await fetch('/api/run', { method: 'POST' });
@@ -161,7 +167,7 @@ document.addEventListener('DOMContentLoaded', () => {
     btnResetFailed.addEventListener('click', async () => {
         const res = await fetch('/api/prompts/reset-failed', { method: 'POST' });
         const data = await res.json();
-        appendLog(`[ACTION] ${data.message || 'Reset failed prompts.'}`, 'system');
+        appendLog(`[ACTION] Reset ${data.reset_count} failed prompt(s).`, 'system');
         updateStatus();
         loadPrompts();
     });
@@ -173,6 +179,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateStatus();
     });
 
+    // ── Prompts Table ────────────────────────────────────────────────────────
     async function loadPrompts() {
         try {
             const res = await fetch('/api/prompts');
@@ -192,11 +199,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (filtered.length === 0) {
-            tableBody.innerHTML = `<tr><td colspan="7" class="empty-state">No prompts found matching filter "${currentFilter}".</td></tr>`;
+            promptsTableBody.innerHTML = `<tr><td colspan="7" class="empty-state">No prompts found matching filter "${currentFilter}".</td></tr>`;
             return;
         }
 
-        tableBody.innerHTML = filtered.map(p => {
+        promptsTableBody.innerHTML = filtered.map(p => {
             const statusClass = p.status ? p.status.toLowerCase() : 'pending';
             const statusLabel = p.status || 'Pending';
             return `
@@ -297,11 +304,21 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // ── Settings Logic ───────────────────────────────────────────────────────
+    const inputCliproxyKey = document.getElementById('setting-cliproxy-key');
+    const inputCliproxyUrl = document.getElementById('setting-cliproxy-url');
+    const inputCliproxyModel = document.getElementById('setting-cliproxy-model');
+    const inputOpenaiKey = document.getElementById('setting-openai-key');
+
     async function loadSettings() {
         try {
             const res = await fetch('/api/settings');
             if (!res.ok) return;
             const data = await res.json();
+            if (inputCliproxyKey) inputCliproxyKey.value = data.CLIPROXY_API_KEY || '';
+            if (inputCliproxyUrl) inputCliproxyUrl.value = data.CLIPROXY_BASE_URL || 'https://cli-proxy-api.femioja.cfd';
+            if (inputCliproxyModel) inputCliproxyModel.value = data.CLIPROXY_MODEL || 'gemini-3.5-flash-low';
+            if (inputOpenaiKey) inputOpenaiKey.value = data.OPENAI_API_KEY || '';
             if (inputReplicateToken) inputReplicateToken.value = data.REPLICATE_API_TOKEN || '';
             if (inputScoreThreshold) inputScoreThreshold.value = data.SCORE_THRESHOLD || 6;
             if (inputMaxRetries) inputMaxRetries.value = data.MAX_RETRIES || 2;
@@ -310,23 +327,31 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    if (btnToggleToken) {
-        btnToggleToken.addEventListener('click', () => {
-            if (inputReplicateToken.type === 'password') {
-                inputReplicateToken.type = 'text';
-                btnToggleToken.textContent = 'Hide';
-            } else {
-                inputReplicateToken.type = 'password';
-                btnToggleToken.textContent = 'Show';
+    document.querySelectorAll('.toggle-password').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const targetId = btn.getAttribute('data-target');
+            const targetInput = document.getElementById(targetId);
+            if (targetInput) {
+                if (targetInput.type === 'password') {
+                    targetInput.type = 'text';
+                    btn.textContent = 'Hide';
+                } else {
+                    targetInput.type = 'password';
+                    btn.textContent = 'Show';
+                }
             }
         });
-    }
+    });
 
     if (settingsForm) {
         settingsForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const payload = {
-                REPLICATE_API_TOKEN: inputReplicateToken.value.trim(),
+                CLIPROXY_API_KEY: inputCliproxyKey ? inputCliproxyKey.value.trim() : '',
+                CLIPROXY_BASE_URL: inputCliproxyUrl ? inputCliproxyUrl.value.trim() : '',
+                CLIPROXY_MODEL: inputCliproxyModel ? inputCliproxyModel.value.trim() : '',
+                OPENAI_API_KEY: inputOpenaiKey ? inputOpenaiKey.value.trim() : '',
+                REPLICATE_API_TOKEN: inputReplicateToken ? inputReplicateToken.value.trim() : '',
                 SCORE_THRESHOLD: parseInt(inputScoreThreshold.value) || 6,
                 MAX_RETRIES: parseInt(inputMaxRetries.value) || 2
             };
@@ -345,4 +370,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function escapeHtml(str) {
         return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
+
+    // Init
+    connectWebSocket();
+    updateStatus();
+    setInterval(updateStatus, 5000);
 });
