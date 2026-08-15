@@ -230,21 +230,16 @@ def login_and_save_session(log_fn=print):
         log_fn("\nOpening Ideogram Login Page...")
         page.get("https://ideogram.ai/login")
         log_fn("\n=== ACTION REQUIRED ===")
-        log_fn("Please log in manually inside the opened Chrome browser window.")
-        log_fn("The browser window will remain open for 5 minutes (300 seconds)...")
+        log_fn("Chrome window is now open.")
+        log_fn("Please sign into Ideogram using Google Sign-In or your preferred method.")
+        log_fn("The browser window will stay open unconditionally for 5 minutes (300 seconds).")
         
-        # Keep open for up to 300 seconds (5 minutes)
-        for i in range(150):
-            page.wait(2)
-            try:
-                current_url = page.url.lower()
-                # Only auto-close if user has navigated to library or user profile page
-                if "ideogram.ai/library" in current_url or "ideogram.ai/manage-account" in current_url:
-                    log_fn("\n✓ Login confirmed! Saved Chrome session profile.")
-                    page.wait(3)
-                    break
-            except Exception:
-                pass
+        # Keep open unconditionally for 300 seconds (5 minutes) so Google OAuth popups work seamlessly
+        for _ in range(300):
+            page.wait(1)
+        log_fn("\n✓ Login window session time ended. Chrome profile saved!")
+    except Exception as e:
+        log_fn(f"Login window note: {e}")
     finally:
         try:
             page.quit()
