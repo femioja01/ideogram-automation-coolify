@@ -102,7 +102,7 @@ def run_login_task():
     try:
         state.status = "Running"
         broadcast_log("[SYSTEM] Launching Ideogram interactive login in Chrome...")
-        engine.login_and_save_session()
+        engine.login_and_save_session(log_fn=broadcast_log)
         broadcast_log("[SYSTEM] Login Chrome session ready.")
     except Exception as e:
         broadcast_log(f"[SYSTEM ERROR] Login launch error: {e}")
