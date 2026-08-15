@@ -34,13 +34,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const terminalOutput = document.getElementById('terminal-output');
     const wsIndicator = document.getElementById('ws-indicator');
 
-    const vncIframe = document.getElementById('vnc-iframe');
-    const btnRefreshVnc = document.getElementById('btn-refresh-vnc');
-    const vncDirectLink = document.getElementById('vnc-direct-link');
-
     const addPromptForm = document.getElementById('add-prompt-form');
     const inputNewPrompt = document.getElementById('input-new-prompt');
-    const promptsTableBody = document.getElementById('prompts-table-body');
+    const tableBody = document.getElementById('prompts-table-body');
     const filterButtons = document.querySelectorAll('.filter-btn');
 
     const galleryGrid = document.getElementById('gallery-grid');
@@ -54,17 +50,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentFilter = 'all';
     let promptsData = [];
     let ws = null;
-
-    // Direct VNC link setup
-    const currentHost = window.location.hostname;
-    const vncUrl = `http://${currentHost}:6080/vnc.html?autoconnect=true`;
-    if (vncDirectLink) vncDirectLink.href = vncUrl;
-
-    if (btnRefreshVnc && vncIframe) {
-        btnRefreshVnc.addEventListener('click', () => {
-            vncIframe.src = `/vnc.html?autoconnect=true&resize=scale&t=${Date.now()}`;
-        });
-    }
 
     // ── WebSocket Log Stream ──────────────────────────────────────────────────
     function connectWebSocket() {
@@ -199,11 +184,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (filtered.length === 0) {
-            promptsTableBody.innerHTML = `<tr><td colspan="7" class="empty-state">No prompts found matching filter "${currentFilter}".</td></tr>`;
+            tableBody.innerHTML = `<tr><td colspan="7" class="empty-state">No prompts found matching filter "${currentFilter}".</td></tr>`;
             return;
         }
 
-        promptsTableBody.innerHTML = filtered.map(p => {
+        tableBody.innerHTML = filtered.map(p => {
             const statusClass = p.status ? p.status.toLowerCase() : 'pending';
             const statusLabel = p.status || 'Pending';
             return `
