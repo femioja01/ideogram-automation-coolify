@@ -96,14 +96,14 @@ def save_settings(new_settings: dict) -> dict:
 def ensure_csv_file():
     """Ensure prompts.csv exists with header."""
     if not CSV_FILE.exists():
-        CSV_FILE.write_text("prompt,status,filename,date,score,image_url\n", encoding="utf-8")
+        CSV_FILE.write_text("prompt,status,filename,date,score,image_url,reason\n", encoding="utf-8")
 
 def read_prompts_csv():
     """Return all rows from CSV as a list of dicts with 1-based index."""
     ensure_csv_file()
     with open(CSV_FILE, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
-        fieldnames = reader.fieldnames or ["prompt","status","filename","date","score","image_url"]
+        fieldnames = reader.fieldnames or ["prompt","status","filename","date","score","image_url","reason"]
         rows = list(reader)
     
     result = []
@@ -116,6 +116,7 @@ def read_prompts_csv():
             "date": row.get("date", "").strip(),
             "score": row.get("score", "").strip(),
             "image_url": row.get("image_url", "").strip(),
+            "reason": row.get("reason", "").strip(),
         })
     return result
 
@@ -129,7 +130,8 @@ def add_prompt_csv(prompt: str) -> bool:
         "filename": "",
         "date": "",
         "score": "",
-        "image_url": ""
+        "image_url": "",
+        "reason": ""
     })
     return save_prompts_csv(rows)
 
@@ -186,6 +188,7 @@ def reset_all_prompts_pending() -> int:
         r["status"] = ""
         r["filename"] = ""
         r["score"] = ""
+        r["reason"] = ""
         count += 1
     if count > 0:
         save_prompts_csv(rows)
@@ -193,7 +196,7 @@ def reset_all_prompts_pending() -> int:
 
 def save_prompts_csv(rows: list) -> bool:
     """Save list of prompt dicts back to CSV file."""
-    fieldnames = ["prompt", "status", "filename", "date", "score", "image_url"]
+    fieldnames = ["prompt", "status", "filename", "date", "score", "image_url", "reason"]
     try:
         with open(CSV_FILE, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -205,7 +208,8 @@ def save_prompts_csv(rows: list) -> bool:
                     "filename": r.get("filename", ""),
                     "date": r.get("date", ""),
                     "score": r.get("score", ""),
-                    "image_url": r.get("image_url", "")
+                    "image_url": r.get("image_url", ""),
+                    "reason": r.get("reason", "")
                 })
         return True
     except Exception as e:
@@ -222,7 +226,7 @@ def get_next_prompt():
             return i, prompt
     return None, None
 
-def update_csv_row(row_index: int, status: str, filename: str = "", score: str = "", image_url: str = ""):
+def update_csv_row(row_index: int, status: str, filename: str = "", score: str = "", image_url: str = "", reason: str = ""):
     """Update a specific row in the CSV with results."""
     ensure_csv_file()
     rows = read_prompts_csv()
@@ -233,6 +237,7 @@ def update_csv_row(row_index: int, status: str, filename: str = "", score: str =
         rows[row_index]["date"]      = now
         rows[row_index]["score"]     = score
         rows[row_index]["image_url"] = image_url
+        rows[row_index]["reason"]    = reason
         save_prompts_csv(rows)
 
 # ── DrissionPage Helpers ───────────────────────────────────────────────────────
@@ -245,6 +250,7 @@ def get_browser_options(headless=False):
     co.set_argument("--disable-gpu")
     co.set_argument("--disable-dev-shm-usage")
     co.set_argument("--disable-blink-features=AutomationControlled")
+    co.set_argument("--start-minimized")
     if headless:
         co.set_argument("--headless=new")
     return co
@@ -350,7 +356,8 @@ def generate_images_on_ideogram(prompt: str, excluded_urls: set[str] = None, log
                             const title = button.getAttribute('title')?.toLowerCase() || '';
                             const text = button.textContent.toLowerCase().trim();
                             if (type === 'submit' || ariaLabel.includes('generate') || ariaLabel.includes('create') ||
-                                ariaLabel.includes('submit') || text === 'generate') return button;
+                                ariaLabel.includes('submit') || title.includes('generate') || title.includes('create') ||
+                                title.includes('submit') || text === 'generate') return button;
                         }
                         return validButtons[validButtons.length - 1]; 
                     }
@@ -610,6 +617,7 @@ def run_pipeline_sync(log_callback=None, cancel_check=None, single_row_index=Non
         best_image_path = None
         best_image_url  = ""
         best_score      = 0
+        best_reason     = ""
 
         for attempt in range(1, max_retries + 1):
             if cancel_check and cancel_check():
@@ -627,9 +635,11 @@ def run_pipeline_sync(log_callback=None, cancel_check=None, single_row_index=Non
             log(f"  Got {len(image_urls)} image URLs. Scoring with Vision LLM...")
             processed_urls.update(image_urls)
 
-            attempt_best_path  = None
-            attempt_best_url   = ""
-            attempt_best_score = 0
+            attempt_best_path   = None
+            attempt_best_url    = ""
+            attempt_best_score  = 0
+            attempt_best_reason = ""
+            last_reason         = ""
 
             for idx, url in enumerate(image_urls, 1):
                 local_path = TEMP_DIR / f"attempt{attempt}_img{idx}.jpg"
@@ -637,12 +647,18 @@ def run_pipeline_sync(log_callback=None, cancel_check=None, single_row_index=Non
                     download_image(url, local_path)
                     result = score_image(local_path, prompt, image_url=url, log_fn=log)
                     score  = result.get("score", 0)
-                    log(f"  Image {idx}: score={score}")
+                    reason = result.get("reason", "").strip()
+                    log(f"  Image {idx}: score={score}/10")
+                    if reason:
+                        log(f"  ↳ Vision Feedback: {reason}")
+                    
+                    last_reason = reason
 
                     if score > attempt_best_score:
-                        attempt_best_score = score
-                        attempt_best_path  = local_path
-                        attempt_best_url   = url
+                        attempt_best_score  = score
+                        attempt_best_path   = local_path
+                        attempt_best_url    = url
+                        attempt_best_reason = reason
 
                 except Exception as e:
                     log(f"  Image {idx}: ERROR — {e}")
@@ -651,6 +667,7 @@ def run_pipeline_sync(log_callback=None, cancel_check=None, single_row_index=Non
                 best_score      = attempt_best_score
                 best_image_path = attempt_best_path
                 best_image_url  = attempt_best_url
+                best_reason     = attempt_best_reason
                 log(f"\n  ✓ Acceptable image found (score {best_score}/10)")
                 break
             else:
@@ -663,11 +680,11 @@ def run_pipeline_sync(log_callback=None, cancel_check=None, single_row_index=Non
             final_path  = OUTPUT_DIR / filename
 
             shutil.copy2(best_image_path, final_path)
-            update_csv_row(row_index, "Done", filename, str(best_score), best_image_url)
+            update_csv_row(row_index, "Done", filename, str(best_score), best_image_url, reason=best_reason)
             log(f"\n✓ Done! Image saved to: {final_path.resolve()}")
         else:
             log(f"\n✗ All attempts failed for this prompt. Marking row as Failed.")
-            update_csv_row(row_index, "Failed", "", str(best_score), best_image_url)
+            update_csv_row(row_index, "Failed", "", str(best_score), best_image_url, reason=last_reason)
 
         # Clean up temp images
         for f in TEMP_DIR.glob("attempt*_img*.jpg"):
