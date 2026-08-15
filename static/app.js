@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // Tab Navigation
+    // Nav & Tabs
     const navButtons = document.querySelectorAll('.nav-btn');
     const tabPanes = document.querySelectorAll('.tab-pane');
 
@@ -9,7 +9,8 @@ document.addEventListener('DOMContentLoaded', () => {
             navButtons.forEach(b => b.classList.remove('active'));
             tabPanes.forEach(p => p.classList.remove('active'));
             btn.classList.add('active');
-            document.getElementById(targetTab).classList.add('active');
+            const pane = document.getElementById(targetTab);
+            if (pane) pane.classList.add('active');
 
             if (targetTab === 'tab-prompts') loadPrompts();
             if (targetTab === 'tab-gallery') loadGallery();
@@ -18,7 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Elements
-    const globalStatusBadge = document.getElementById('global-status-badge');
+    const statusBadge = document.getElementById('global-status-badge');
     const statTotal = document.getElementById('stat-total');
     const statDone = document.getElementById('stat-done');
     const statPending = document.getElementById('stat-pending');
@@ -28,50 +29,92 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnRunBatch = document.getElementById('btn-run-batch');
     const btnStopBatch = document.getElementById('btn-stop-batch');
     const btnResetFailed = document.getElementById('btn-reset-failed');
+    const btnResetAll = document.getElementById('btn-reset-all');
     const btnLaunchLogin = document.getElementById('btn-launch-login');
+    const wsIndicator = document.getElementById('ws-indicator');
+    const terminalOutput = document.getElementById('terminal-output');
     const btnClearLogs = document.getElementById('btn-clear-logs');
     const chkAutoScroll = document.getElementById('chk-autoscroll');
-    const terminalOutput = document.getElementById('terminal-output');
-    const wsIndicator = document.getElementById('ws-indicator');
 
     const addPromptForm = document.getElementById('add-prompt-form');
     const inputNewPrompt = document.getElementById('input-new-prompt');
     const tableBody = document.getElementById('prompts-table-body');
     const filterButtons = document.querySelectorAll('.filter-btn');
-
     const galleryGrid = document.getElementById('gallery-grid');
+
+    const chkSelectAll = document.getElementById('chk-select-all');
+    const btnDeleteSelected = document.getElementById('btn-delete-selected');
+    const selectedCountSpan = document.getElementById('selected-count');
+    const btnClearAllPrompts = document.getElementById('btn-clear-all-prompts');
+
+    // Settings Elements
     const settingsForm = document.getElementById('settings-form');
+    const inputCliproxyKey = document.getElementById('setting-cliproxy-key');
+    const inputCliproxyUrl = document.getElementById('setting-cliproxy-url');
+    const inputCliproxyModel = document.getElementById('setting-cliproxy-model');
+    const inputOpenaiKey = document.getElementById('setting-openai-key');
     const inputReplicateToken = document.getElementById('setting-replicate-token');
     const inputScoreThreshold = document.getElementById('setting-score-threshold');
     const inputMaxRetries = document.getElementById('setting-max-retries');
-    const btnToggleToken = document.getElementById('btn-toggle-token');
     const settingsToast = document.getElementById('settings-toast');
 
     let currentFilter = 'all';
     let promptsData = [];
     let ws = null;
 
+    // ── Status Polling ────────────────────────────────────────────────────────
+    async function updateStatus() {
+        try {
+            const res = await fetch('/api/status');
+            if (!res.ok) return;
+            const data = await res.json();
+            if (statusBadge) {
+                statusBadge.textContent = data.status;
+                statusBadge.className = `status-pill ${data.status.toLowerCase()}`;
+            }
+
+            if (data.status === 'Running') {
+                if (btnRunBatch) btnRunBatch.disabled = true;
+                if (btnStopBatch) btnStopBatch.disabled = false;
+                if (btnLaunchLogin) btnLaunchLogin.disabled = true;
+            } else if (data.status === 'Stopping') {
+                if (btnRunBatch) btnRunBatch.disabled = true;
+                if (btnStopBatch) btnStopBatch.disabled = true;
+                if (btnLaunchLogin) btnLaunchLogin.disabled = true;
+            } else {
+                if (btnRunBatch) btnRunBatch.disabled = false;
+                if (btnStopBatch) btnStopBatch.disabled = true;
+                if (btnLaunchLogin) btnLaunchLogin.disabled = false;
+            }
+
+            if (statTotal) statTotal.textContent = data.total_prompts;
+            if (statDone) statDone.textContent = data.done_count;
+            if (statPending) statPending.textContent = data.pending_count;
+            if (statFailed) statFailed.textContent = data.failed_count;
+            if (statImages) statImages.textContent = data.image_count;
+        } catch (e) {
+            console.error('Status fetch error:', e);
+        }
+    }
+
     // ── WebSocket Log Stream ──────────────────────────────────────────────────
     function connectWebSocket() {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${protocol}//${window.location.host}/ws/logs`;
-
         ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {
-            wsIndicator.className = 'dot online';
+            if (wsIndicator) wsIndicator.className = 'dot online';
         };
 
         ws.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
                 if (data.type === 'history') {
-                    terminalOutput.innerHTML = '';
+                    if (terminalOutput) terminalOutput.innerHTML = '';
                     data.logs.forEach(log => appendLog(log));
-                    updateStatusPill(data.status);
                 } else if (data.type === 'log') {
                     appendLog(data.message);
-                    if (data.status) updateStatusPill(data.status);
                 }
             } catch (e) {
                 appendLog(event.data);
@@ -79,92 +122,83 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         ws.onclose = () => {
-            wsIndicator.className = 'dot offline';
+            if (wsIndicator) wsIndicator.className = 'dot offline';
             setTimeout(connectWebSocket, 3000);
         };
 
-        ws.onerror = (err) => {
-            wsIndicator.className = 'dot offline';
+        ws.onerror = () => {
+            if (wsIndicator) wsIndicator.className = 'dot offline';
         };
     }
 
     function appendLog(text, type = 'normal') {
+        if (!terminalOutput) return;
         const line = document.createElement('div');
         line.className = `log-line ${type}`;
         line.textContent = text;
         terminalOutput.appendChild(line);
 
-        if (chkAutoScroll.checked) {
+        if (chkAutoScroll && chkAutoScroll.checked) {
             terminalOutput.scrollTop = terminalOutput.scrollHeight;
         }
     }
 
-    btnClearLogs.addEventListener('click', () => {
-        terminalOutput.innerHTML = '<div class="log-line system">[SYSTEM] Terminal logs cleared.</div>';
-    });
+    if (btnClearLogs) {
+        btnClearLogs.addEventListener('click', () => {
+            if (terminalOutput) terminalOutput.innerHTML = '<div class="log-line system">[SYSTEM] Terminal logs cleared.</div>';
+        });
+    }
 
-    // ── API Actions & Status Polling ─────────────────────────────────────────
-    async function updateStatus() {
-        try {
-            const res = await fetch('/api/status');
-            if (!res.ok) return;
+    // ── Action Buttons ────────────────────────────────────────────────────────
+    if (btnRunBatch) {
+        btnRunBatch.addEventListener('click', async () => {
+            const res = await fetch('/api/run', { method: 'POST' });
             const data = await res.json();
-
-            statTotal.textContent = data.total_prompts;
-            statDone.textContent = data.done_count;
-            statPending.textContent = data.pending_count;
-            statFailed.textContent = data.failed_count;
-            statImages.textContent = data.image_count;
-
-            updateStatusPill(data.status);
-
-            if (data.status === 'Running') {
-                btnRunBatch.disabled = true;
-                btnStopBatch.disabled = false;
-            } else {
-                btnRunBatch.disabled = false;
-                btnStopBatch.disabled = true;
-            }
-        } catch (e) {
-            console.error('Error fetching status:', e);
-        }
+            appendLog(`[ACTION] ${data.message}`, 'system');
+            updateStatus();
+        });
     }
 
-    function updateStatusPill(status) {
-        globalStatusBadge.textContent = status;
-        globalStatusBadge.className = 'status-pill ' + (status ? status.toLowerCase() : 'idle');
+    if (btnStopBatch) {
+        btnStopBatch.addEventListener('click', async () => {
+            const res = await fetch('/api/stop', { method: 'POST' });
+            const data = await res.json();
+            appendLog(`[ACTION] ${data.message}`, 'system');
+            updateStatus();
+        });
     }
 
-    btnRunBatch.addEventListener('click', async () => {
-        const res = await fetch('/api/run', { method: 'POST' });
-        const data = await res.json();
-        appendLog(`[ACTION] ${data.message}`, 'system');
-        updateStatus();
-    });
+    if (btnResetFailed) {
+        btnResetFailed.addEventListener('click', async () => {
+            const res = await fetch('/api/prompts/reset-failed', { method: 'POST' });
+            const data = await res.json();
+            appendLog(`[ACTION] Reset ${data.reset_count} failed prompt(s).`, 'system');
+            updateStatus();
+            loadPrompts();
+        });
+    }
 
-    btnStopBatch.addEventListener('click', async () => {
-        const res = await fetch('/api/stop', { method: 'POST' });
-        const data = await res.json();
-        appendLog(`[ACTION] ${data.message}`, 'system');
-        updateStatus();
-    });
+    if (btnResetAll) {
+        btnResetAll.addEventListener('click', async () => {
+            if (!confirm('Are you sure you want to reset ALL prompts back to Pending status?')) return;
+            const res = await fetch('/api/prompts/reset-all', { method: 'POST' });
+            const data = await res.json();
+            appendLog(`[ACTION] Reset ${data.reset_count} prompt(s) back to Pending.`, 'system');
+            updateStatus();
+            loadPrompts();
+        });
+    }
 
-    btnResetFailed.addEventListener('click', async () => {
-        const res = await fetch('/api/prompts/reset-failed', { method: 'POST' });
-        const data = await res.json();
-        appendLog(`[ACTION] Reset ${data.reset_count} failed prompt(s).`, 'system');
-        updateStatus();
-        loadPrompts();
-    });
+    if (btnLaunchLogin) {
+        btnLaunchLogin.addEventListener('click', async () => {
+            const res = await fetch('/api/login', { method: 'POST' });
+            const data = await res.json();
+            appendLog(`[ACTION] ${data.message}`, 'system');
+            updateStatus();
+        });
+    }
 
-    btnLaunchLogin.addEventListener('click', async () => {
-        const res = await fetch('/api/login', { method: 'POST' });
-        const data = await res.json();
-        appendLog(`[ACTION] ${data.message}`, 'system');
-        updateStatus();
-    });
-
-    // ── Prompts Table ────────────────────────────────────────────────────────
+    // ── Prompts Database & Bulk Operations ───────────────────────────────────
     async function loadPrompts() {
         try {
             const res = await fetch('/api/prompts');
@@ -176,7 +210,65 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function updateSelectionState() {
+        const checkedBoxes = document.querySelectorAll('.chk-select-prompt:checked');
+        const count = checkedBoxes.length;
+        if (selectedCountSpan) selectedCountSpan.textContent = count;
+        if (btnDeleteSelected) btnDeleteSelected.disabled = (count === 0);
+
+        const allBoxes = document.querySelectorAll('.chk-select-prompt');
+        if (chkSelectAll && allBoxes.length > 0) {
+            chkSelectAll.checked = (checkedBoxes.length === allBoxes.length);
+        }
+    }
+
+    if (chkSelectAll) {
+        chkSelectAll.addEventListener('change', () => {
+            const isChecked = chkSelectAll.checked;
+            document.querySelectorAll('.chk-select-prompt').forEach(chk => {
+                chk.checked = isChecked;
+            });
+            updateSelectionState();
+        });
+    }
+
+    if (btnDeleteSelected) {
+        btnDeleteSelected.addEventListener('click', async () => {
+            const checkedBoxes = document.querySelectorAll('.chk-select-prompt:checked');
+            const ids = Array.from(checkedBoxes).map(cb => parseInt(cb.getAttribute('data-id')));
+            if (ids.length === 0) return;
+
+            if (!confirm(`Are you sure you want to delete ${ids.length} selected prompt(s)?`)) return;
+
+            const res = await fetch('/api/prompts/delete-bulk', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids })
+            });
+
+            if (res.ok) {
+                if (chkSelectAll) chkSelectAll.checked = false;
+                loadPrompts();
+                updateStatus();
+            }
+        });
+    }
+
+    if (btnClearAllPrompts) {
+        btnClearAllPrompts.addEventListener('click', async () => {
+            if (!confirm('🚨 WARNING: Are you sure you want to delete ALL prompts from prompts.csv database?')) return;
+
+            const res = await fetch('/api/prompts/clear-all', { method: 'POST' });
+            if (res.ok) {
+                if (chkSelectAll) chkSelectAll.checked = false;
+                loadPrompts();
+                updateStatus();
+            }
+        });
+    }
+
     function renderPromptsTable() {
+        if (!tableBody) return;
         const filtered = promptsData.filter(p => {
             if (currentFilter === 'all') return true;
             if (currentFilter === 'pending') return !p.status;
@@ -184,7 +276,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (filtered.length === 0) {
-            tableBody.innerHTML = `<tr><td colspan="7" class="empty-state">No prompts found matching filter "${currentFilter}".</td></tr>`;
+            tableBody.innerHTML = `<tr><td colspan="8" class="empty-state">No prompts found matching filter "${currentFilter}".</td></tr>`;
+            updateSelectionState();
             return;
         }
 
@@ -193,6 +286,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const statusLabel = p.status || 'Pending';
             return `
                 <tr>
+                    <td style="text-align: center;"><input type="checkbox" class="chk-select-prompt" data-id="${p.id}"></td>
                     <td>${p.id + 1}</td>
                     <td><strong>${escapeHtml(p.prompt)}</strong></td>
                     <td><span class="badge ${statusClass}">${statusLabel}</span></td>
@@ -206,6 +300,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 </tr>
             `;
         }).join('');
+
+        document.querySelectorAll('.chk-select-prompt').forEach(chk => {
+            chk.addEventListener('change', updateSelectionState);
+        });
+
+        updateSelectionState();
 
         document.querySelectorAll('.btn-run-single').forEach(b => {
             b.addEventListener('click', async () => {
@@ -244,23 +344,34 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    addPromptForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const text = inputNewPrompt.value.trim();
-        if (!text) return;
-        const res = await fetch('/api/prompts/add', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt: text })
-        });
-        if (res.ok) {
+    if (addPromptForm) {
+        addPromptForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const text = inputNewPrompt.value.trim();
+            if (!text) return;
+
+            const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+            if (lines.length === 0) return;
+
+            let addedCount = 0;
+            for (const promptLine of lines) {
+                const res = await fetch('/api/prompts/add', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt: promptLine })
+                });
+                if (res.ok) addedCount++;
+            }
+
             inputNewPrompt.value = '';
+            appendLog(`[ACTION] Successfully added ${addedCount} prompt(s) to database.`, 'system');
             loadPrompts();
             updateStatus();
-        }
-    });
+        });
+    }
 
     async function loadGallery() {
+        if (!galleryGrid) return;
         try {
             const res = await fetch('/api/gallery');
             if (!res.ok) return;
@@ -290,11 +401,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ── Settings Logic ───────────────────────────────────────────────────────
-    const inputCliproxyKey = document.getElementById('setting-cliproxy-key');
-    const inputCliproxyUrl = document.getElementById('setting-cliproxy-url');
-    const inputCliproxyModel = document.getElementById('setting-cliproxy-model');
-    const inputOpenaiKey = document.getElementById('setting-openai-key');
-
     async function loadSettings() {
         try {
             const res = await fetch('/api/settings');
@@ -346,8 +452,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify(payload)
             });
             if (res.ok) {
-                settingsToast.textContent = '✓ Settings saved successfully!';
-                setTimeout(() => { settingsToast.textContent = ''; }, 4000);
+                if (settingsToast) {
+                    settingsToast.textContent = '✓ Settings saved successfully!';
+                    setTimeout(() => { settingsToast.textContent = ''; }, 4000);
+                }
             }
         });
     }
