@@ -222,18 +222,32 @@ def get_browser_options(headless=False):
         co.set_argument("--headless=new")
     return co
 
-def login_and_save_session():
-    """Run once interactively in headful window to save Ideogram login state."""
+def login_and_save_session(log_fn=print):
+    """Run interactively in browser window to save Ideogram login state."""
     co = get_browser_options(headless=False)
     page = ChromiumPage(co)
     try:
-        print("\nOpening Ideogram Login Page...")
+        log_fn("\nOpening Ideogram Login Page...")
         page.get("https://ideogram.ai/login")
-        print("\n=== ACTION REQUIRED ===")
-        print("Please log in manually inside the opened browser window (or via the Live Screen tab).")
-        page.wait(10)
+        log_fn("\n=== ACTION REQUIRED ===")
+        log_fn("Please log in manually inside the opened Chrome browser window.")
+        log_fn("Waiting up to 5 minutes for you to complete sign in...")
+        
+        for i in range(150): # Wait up to 300 seconds (5 minutes)
+            page.wait(2)
+            try:
+                current_url = page.url.lower()
+                if "ideogram.ai" in current_url and "login" not in current_url:
+                    log_fn("\n✓ Login detected! Saved Chrome session profile.")
+                    page.wait(3)
+                    break
+            except Exception:
+                pass
     finally:
-        page.quit()
+        try:
+            page.quit()
+        except Exception:
+            pass
 
 def generate_images_on_ideogram(prompt: str, excluded_urls: set[str] = None, log_fn=print) -> list[str]:
     """
