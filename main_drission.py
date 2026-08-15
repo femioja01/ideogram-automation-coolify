@@ -25,8 +25,24 @@ load_dotenv()
 
 # ── Config & Settings ─────────────────────────────────────────────────────────
 
-CSV_FILE      = Path("prompts.csv")
-SETTINGS_FILE = Path("settings.json")
+PROMPTS_DIR   = Path("prompts_data")
+PROMPTS_DIR.mkdir(exist_ok=True)
+
+CSV_FILE      = PROMPTS_DIR / "prompts.csv"
+SETTINGS_FILE = PROMPTS_DIR / "settings.json"
+
+# Migration check: if root files exist but not in prompts_data, copy them over
+if Path("prompts.csv").exists() and not CSV_FILE.exists():
+    try:
+        shutil.copy2("prompts.csv", CSV_FILE)
+    except Exception:
+        pass
+
+if Path("settings.json").exists() and not SETTINGS_FILE.exists():
+    try:
+        shutil.copy2("settings.json", SETTINGS_FILE)
+    except Exception:
+        pass
 
 output_env = os.getenv("OUTPUT_DIR", "").strip()
 OUTPUT_DIR    = Path(output_env if output_env else "output_images")
