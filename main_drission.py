@@ -178,6 +178,19 @@ def reset_failed_prompts() -> int:
         save_prompts_csv(rows)
     return count
 
+def reset_all_prompts_pending() -> int:
+    """Reset status of ALL prompts back to blank (Pending)."""
+    rows = read_prompts_csv()
+    count = 0
+    for r in rows:
+        r["status"] = ""
+        r["filename"] = ""
+        r["score"] = ""
+        count += 1
+    if count > 0:
+        save_prompts_csv(rows)
+    return count
+
 def save_prompts_csv(rows: list) -> bool:
     """Save list of prompt dicts back to CSV file."""
     fieldnames = ["prompt", "status", "filename", "date", "score", "image_url"]
