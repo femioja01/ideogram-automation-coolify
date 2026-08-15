@@ -152,6 +152,20 @@ def delete_prompt_csv(row_index: int) -> bool:
         return save_prompts_csv(rows)
     return False
 
+def delete_multiple_prompts_csv(row_indices: list[int]) -> int:
+    """Delete multiple prompt rows from CSV by index list."""
+    rows = read_prompts_csv()
+    indices_set = set(row_indices)
+    new_rows = [r for idx, r in enumerate(rows) if idx not in indices_set]
+    deleted_count = len(rows) - len(new_rows)
+    if deleted_count > 0:
+        save_prompts_csv(new_rows)
+    return deleted_count
+
+def clear_all_prompts_csv() -> bool:
+    """Clear all prompt rows from CSV."""
+    return save_prompts_csv([])
+
 def reset_failed_prompts() -> int:
     """Reset status of all Failed prompts to blank."""
     rows = read_prompts_csv()
@@ -323,8 +337,7 @@ def generate_images_on_ideogram(prompt: str, excluded_urls: set[str] = None, log
                             const title = button.getAttribute('title')?.toLowerCase() || '';
                             const text = button.textContent.toLowerCase().trim();
                             if (type === 'submit' || ariaLabel.includes('generate') || ariaLabel.includes('create') ||
-                                ariaLabel.includes('submit') || title.includes('generate') || title.includes('create') ||
-                                title.includes('submit') || text === 'generate') return button;
+                                ariaLabel.includes('submit') || text === 'generate') return button;
                         }
                         return validButtons[validButtons.length - 1]; 
                     }
