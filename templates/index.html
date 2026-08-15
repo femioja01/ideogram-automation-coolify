@@ -11,6 +11,7 @@
 </head>
 <body>
     <div class="app-container">
+        <!-- HEADER -->
         <header class="app-header">
             <div class="logo-area">
                 <div class="logo-icon">⚡</div>
@@ -24,6 +25,7 @@
             </div>
         </header>
 
+        <!-- NAVIGATION TABS -->
         <nav class="nav-tabs">
             <button class="nav-btn active" data-tab="tab-dashboard"><span class="icon">📊</span> Dashboard & Logs</button>
             <button class="nav-btn" data-tab="tab-vnc"><span class="icon">🖥️</span> Live Browser Screen</button>
@@ -32,14 +34,31 @@
             <button class="nav-btn" data-tab="tab-settings"><span class="icon">⚙️</span> App Settings</button>
         </nav>
 
+        <!-- MAIN PANES -->
         <main class="main-content">
+            <!-- TAB 1: DASHBOARD & LOGS -->
             <section id="tab-dashboard" class="tab-pane active">
                 <div class="stats-grid">
-                    <div class="stat-card"><div class="stat-title">Total Prompts</div><div id="stat-total" class="stat-value">0</div></div>
-                    <div class="stat-card success"><div class="stat-title">Completed (Done)</div><div id="stat-done" class="stat-value">0</div></div>
-                    <div class="stat-card warning"><div class="stat-title">Pending</div><div id="stat-pending" class="stat-value">0</div></div>
-                    <div class="stat-card danger"><div class="stat-title">Failed</div><div id="stat-failed" class="stat-value">0</div></div>
-                    <div class="stat-card accent"><div class="stat-title">Images Generated</div><div id="stat-images" class="stat-value">0</div></div>
+                    <div class="stat-card">
+                        <div class="stat-title">Total Prompts</div>
+                        <div id="stat-total" class="stat-value">0</div>
+                    </div>
+                    <div class="stat-card success">
+                        <div class="stat-title">Completed (Done)</div>
+                        <div id="stat-done" class="stat-value">0</div>
+                    </div>
+                    <div class="stat-card warning">
+                        <div class="stat-title">Pending</div>
+                        <div id="stat-pending" class="stat-value">0</div>
+                    </div>
+                    <div class="stat-card danger">
+                        <div class="stat-title">Failed</div>
+                        <div id="stat-failed" class="stat-value">0</div>
+                    </div>
+                    <div class="stat-card accent">
+                        <div class="stat-title">Images Generated</div>
+                        <div id="stat-images" class="stat-value">0</div>
+                    </div>
                 </div>
 
                 <div class="control-panel">
@@ -57,12 +76,16 @@
                 <div class="terminal-container">
                     <div class="terminal-header">
                         <div class="terminal-title">
-                            <span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span>
+                            <span class="terminal-dot red"></span>
+                            <span class="terminal-dot yellow"></span>
+                            <span class="terminal-dot green"></span>
                             <span style="margin-left: 8px;">Execution Logs (Live Output)</span>
                         </div>
                         <div class="terminal-actions">
                             <button id="btn-clear-logs" class="btn-sm">Clear Terminal</button>
-                            <label class="auto-scroll-toggle"><input type="checkbox" id="chk-autoscroll" checked> Auto-Scroll</label>
+                            <label class="auto-scroll-toggle">
+                                <input type="checkbox" id="chk-autoscroll" checked> Auto-Scroll
+                            </label>
                         </div>
                     </div>
                     <div id="terminal-output" class="terminal-body">
@@ -71,6 +94,7 @@
                 </div>
             </section>
 
+            <!-- TAB 2: LIVE BROWSER STREAM -->
             <section id="tab-vnc" class="tab-pane">
                 <div class="vnc-banner">
                     <div>
@@ -88,6 +112,7 @@
                 </div>
             </section>
 
+            <!-- TAB 3: PROMPTS MANAGER -->
             <section id="tab-prompts" class="tab-pane">
                 <div class="card add-prompt-card">
                     <h3>Add New Prompt</h3>
@@ -111,7 +136,13 @@
                         <table class="prompts-table">
                             <thead>
                                 <tr>
-                                    <th>#</th><th>Prompt Text</th><th>Status</th><th>Score</th><th>Filename / Image</th><th>Date</th><th>Actions</th>
+                                    <th>#</th>
+                                    <th>Prompt Text</th>
+                                    <th>Status</th>
+                                    <th>Score</th>
+                                    <th>Filename / Image</th>
+                                    <th>Date</th>
+                                    <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody id="prompts-table-body">
@@ -122,6 +153,7 @@
                 </div>
             </section>
 
+            <!-- TAB 4: IMAGE GALLERY -->
             <section id="tab-gallery" class="tab-pane">
                 <div class="gallery-header card">
                     <h3>Generated Image Assets (`output_images/`)</h3>
@@ -132,32 +164,80 @@
                 </div>
             </section>
 
+            <!-- TAB 5: APP SETTINGS -->
             <section id="tab-settings" class="tab-pane">
                 <div class="card settings-card">
-                    <h3>Application & API Settings</h3>
-                    <p class="subtitle" style="margin-bottom: 20px;">Configure your API keys and scoring options. Settings persist automatically across runs.</p>
+                    <h3>Application & Vision API Settings</h3>
+                    <p class="subtitle" style="margin-bottom: 20px;">Configure CLIProxy, OpenAI, or Replicate Vision API credentials and scoring options. Settings persist automatically across runs.</p>
                     
                     <form id="settings-form" class="settings-form">
-                        <div class="form-group">
-                            <label for="setting-replicate-token">Replicate API Token (`REPLICATE_API_TOKEN`)</label>
-                            <div class="input-with-button">
-                                <input type="password" id="setting-replicate-token" placeholder="r8_********************************">
-                                <button type="button" id="btn-toggle-token" class="btn btn-secondary btn-sm">Show</button>
+                        <div class="settings-section">
+                            <h4 style="margin-bottom: 12px; color: var(--text-primary);">⚡ CLIProxy Vision API (Priority #1)</h4>
+                            <div class="form-group">
+                                <label for="setting-cliproxy-key">CLIProxy API Key (`CLIPROXY_API_KEY`)</label>
+                                <div class="input-with-button">
+                                    <input type="password" id="setting-cliproxy-key" placeholder="Enter CLIProxy API key...">
+                                    <button type="button" class="btn btn-secondary btn-sm toggle-password" data-target="setting-cliproxy-key">Show</button>
+                                </div>
+                                <span class="field-hint">Used for high-speed scoring via your CLIProxy endpoint (e.g. Gemini 3.5 Flash Low).</span>
                             </div>
-                            <span class="field-hint">Required for scoring images with Replicate GPT-4o-Mini vision model.</span>
+
+                            <div class="form-grid-2">
+                                <div class="form-group">
+                                    <label for="setting-cliproxy-url">CLIProxy Base URL (`CLIPROXY_BASE_URL`)</label>
+                                    <input type="text" id="setting-cliproxy-url" placeholder="https://cli-proxy-api.femioja.cfd">
+                                    <span class="field-hint">Base URL for CLIProxy API. Default: `https://cli-proxy-api.femioja.cfd`</span>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="setting-cliproxy-model">CLIProxy Model (`CLIPROXY_MODEL`)</label>
+                                    <input type="text" id="setting-cliproxy-model" placeholder="gemini-3.5-flash-low">
+                                    <span class="field-hint">Vision model name. Default: `gemini-3.5-flash-low`</span>
+                                </div>
+                            </div>
                         </div>
 
-                        <div class="form-grid-2">
-                            <div class="form-group">
-                                <label for="setting-score-threshold">Score Threshold (1-10)</label>
-                                <input type="number" id="setting-score-threshold" min="1" max="10" value="6">
-                                <span class="field-hint">Minimum score required to accept an image. Default: 6</span>
-                            </div>
+                        <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 20px 0;">
 
-                            <div class="form-group">
-                                <label for="setting-max-retries">Max Retries per Prompt</label>
-                                <input type="number" id="setting-max-retries" min="1" max="5" value="2">
-                                <span class="field-hint">How many times to regenerate if images score below threshold. Default: 2</span>
+                        <div class="settings-section">
+                            <h4 style="margin-bottom: 12px; color: var(--text-primary);">🤖 Fallback Vision API Keys</h4>
+                            <div class="form-grid-2">
+                                <div class="form-group">
+                                    <label for="setting-openai-key">OpenAI API Key (`OPENAI_API_KEY`)</label>
+                                    <div class="input-with-button">
+                                        <input type="password" id="setting-openai-key" placeholder="sk-proj-****************">
+                                        <button type="button" class="btn btn-secondary btn-sm toggle-password" data-target="setting-openai-key">Show</button>
+                                    </div>
+                                    <span class="field-hint">Fallback #2: Uses GPT-4o-Mini via OpenAI API directly.</span>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="setting-replicate-token">Replicate API Token (`REPLICATE_API_TOKEN`)</label>
+                                    <div class="input-with-button">
+                                        <input type="password" id="setting-replicate-token" placeholder="r8_********************************">
+                                        <button type="button" class="btn btn-secondary btn-sm toggle-password" data-target="setting-replicate-token">Show</button>
+                                    </div>
+                                    <span class="field-hint">Fallback #3: Uses GPT-4o-Mini via Replicate API.</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 20px 0;">
+
+                        <div class="settings-section">
+                            <h4 style="margin-bottom: 12px; color: var(--text-primary);">🎛️ Pipeline Scoring Options</h4>
+                            <div class="form-grid-2">
+                                <div class="form-group">
+                                    <label for="setting-score-threshold">Score Threshold (1-10)</label>
+                                    <input type="number" id="setting-score-threshold" min="1" max="10" value="6">
+                                    <span class="field-hint">Minimum score required to accept an image. Default: 6</span>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="setting-max-retries">Max Retries per Prompt</label>
+                                    <input type="number" id="setting-max-retries" min="1" max="5" value="2">
+                                    <span class="field-hint">How many times to regenerate if images score below threshold. Default: 2</span>
+                                </div>
                             </div>
                         </div>
 
