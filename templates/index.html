@@ -88,30 +88,29 @@
                 </div>
 
                 <div class="card table-card">
-                    <div class="table-header">
+                    <div class="table-header" style="flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;">
                         <h3>Prompts Database (`prompts.csv`)</h3>
-                        <div class="table-filters">
-                            <button class="filter-btn active" data-filter="all">All</button>
-                            <button class="filter-btn" data-filter="pending">Pending</button>
-                            <button class="filter-btn" data-filter="done">Done</button>
-                            <button class="filter-btn" data-filter="failed">Failed</button>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <button id="btn-delete-selected" class="btn btn-danger btn-sm" disabled>🗑 Delete Selected (<span id="selected-count">0</span>)</button>
+                            <button id="btn-clear-all-prompts" class="btn btn-secondary btn-sm">Clear ALL</button>
+                            <div class="table-filters" style="margin-left: 8px;">
+                                <button class="filter-btn active" data-filter="all">All</button>
+                                <button class="filter-btn" data-filter="pending">Pending</button>
+                                <button class="filter-btn" data-filter="done">Done</button>
+                                <button class="filter-btn" data-filter="failed">Failed</button>
+                            </div>
                         </div>
                     </div>
                     <div class="table-wrapper">
                         <table class="prompts-table">
                             <thead>
                                 <tr>
-                                    <th>#</th>
-                                    <th>Prompt Text</th>
-                                    <th>Status</th>
-                                    <th>Score</th>
-                                    <th>Filename / Image</th>
-                                    <th>Date</th>
-                                    <th>Actions</th>
+                                    <th style="width: 36px; text-align: center;"><input type="checkbox" id="chk-select-all" title="Select All"></th>
+                                    <th>#</th><th>Prompt Text</th><th>Status</th><th>Score</th><th>Filename / Image</th><th>Date</th><th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody id="prompts-table-body">
-                                <tr><td colspan="7" class="empty-state">Loading prompts database...</td></tr>
+                                <tr><td colspan="8" class="empty-state">Loading prompts database...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -215,6 +214,6 @@
             </section>
         </main>
     </div>
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=2.0"></script>
 </body>
 </html>
