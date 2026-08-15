@@ -231,14 +231,16 @@ def login_and_save_session(log_fn=print):
         page.get("https://ideogram.ai/login")
         log_fn("\n=== ACTION REQUIRED ===")
         log_fn("Please log in manually inside the opened Chrome browser window.")
-        log_fn("Waiting up to 5 minutes for you to complete sign in...")
+        log_fn("The browser window will remain open for 5 minutes (300 seconds)...")
         
-        for i in range(150): # Wait up to 300 seconds (5 minutes)
+        # Keep open for up to 300 seconds (5 minutes)
+        for i in range(150):
             page.wait(2)
             try:
                 current_url = page.url.lower()
-                if "ideogram.ai" in current_url and "login" not in current_url:
-                    log_fn("\n✓ Login detected! Saved Chrome session profile.")
+                # Only auto-close if user has navigated to library or user profile page
+                if "ideogram.ai/library" in current_url or "ideogram.ai/manage-account" in current_url:
+                    log_fn("\n✓ Login confirmed! Saved Chrome session profile.")
                     page.wait(3)
                     break
             except Exception:
