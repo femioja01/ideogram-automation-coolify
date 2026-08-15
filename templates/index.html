@@ -25,40 +25,24 @@
             </div>
         </header>
 
-        <!-- NAVIGATION TABS -->
+        <!-- Navigation Bar -->
         <nav class="nav-tabs">
             <button class="nav-btn active" data-tab="tab-dashboard"><span class="icon">📊</span> Dashboard & Logs</button>
-            <button class="nav-btn" data-tab="tab-vnc"><span class="icon">🖥️</span> Live Browser Screen</button>
             <button class="nav-btn" data-tab="tab-prompts"><span class="icon">📝</span> Prompts Manager</button>
             <button class="nav-btn" data-tab="tab-gallery"><span class="icon">🖼️</span> Image Gallery</button>
             <button class="nav-btn" data-tab="tab-settings"><span class="icon">⚙️</span> App Settings</button>
         </nav>
 
-        <!-- MAIN PANES -->
+        <!-- Main Content Area -->
         <main class="main-content">
             <!-- TAB 1: DASHBOARD & LOGS -->
             <section id="tab-dashboard" class="tab-pane active">
                 <div class="stats-grid">
-                    <div class="stat-card">
-                        <div class="stat-title">Total Prompts</div>
-                        <div id="stat-total" class="stat-value">0</div>
-                    </div>
-                    <div class="stat-card success">
-                        <div class="stat-title">Completed (Done)</div>
-                        <div id="stat-done" class="stat-value">0</div>
-                    </div>
-                    <div class="stat-card warning">
-                        <div class="stat-title">Pending</div>
-                        <div id="stat-pending" class="stat-value">0</div>
-                    </div>
-                    <div class="stat-card danger">
-                        <div class="stat-title">Failed</div>
-                        <div id="stat-failed" class="stat-value">0</div>
-                    </div>
-                    <div class="stat-card accent">
-                        <div class="stat-title">Images Generated</div>
-                        <div id="stat-images" class="stat-value">0</div>
-                    </div>
+                    <div class="stat-card"><div class="stat-title">Total Prompts</div><div id="stat-total" class="stat-value">0</div></div>
+                    <div class="stat-card success"><div class="stat-title">Completed (Done)</div><div id="stat-done" class="stat-value">0</div></div>
+                    <div class="stat-card warning"><div class="stat-title">Pending</div><div id="stat-pending" class="stat-value">0</div></div>
+                    <div class="stat-card danger"><div class="stat-title">Failed</div><div id="stat-failed" class="stat-value">0</div></div>
+                    <div class="stat-card accent"><div class="stat-title">Images Generated</div><div id="stat-images" class="stat-value">0</div></div>
                 </div>
 
                 <div class="control-panel">
@@ -76,38 +60,16 @@
                 <div class="terminal-container">
                     <div class="terminal-header">
                         <div class="terminal-title">
-                            <span class="terminal-dot red"></span>
-                            <span class="terminal-dot yellow"></span>
-                            <span class="terminal-dot green"></span>
+                            <span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span>
                             <span style="margin-left: 8px;">Execution Logs (Live Output)</span>
                         </div>
                         <div class="terminal-actions">
                             <button id="btn-clear-logs" class="btn-sm">Clear Terminal</button>
-                            <label class="auto-scroll-toggle">
-                                <input type="checkbox" id="chk-autoscroll" checked> Auto-Scroll
-                            </label>
+                            <label class="auto-scroll-toggle"><input type="checkbox" id="chk-autoscroll" checked> Auto-Scroll</label>
                         </div>
                     </div>
                     <div id="terminal-output" class="terminal-body">
                         <div class="log-line system">[SYSTEM] Dashboard initialized. Waiting for task logs...</div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- TAB 2: LIVE BROWSER STREAM -->
-            <section id="tab-vnc" class="tab-pane">
-                <div class="vnc-banner">
-                    <div>
-                        <h3>Live Headless Chrome Screen (XVFB + noVNC)</h3>
-                        <p>Watch DrissionPage automation in real-time or log into Ideogram interactively directly from your browser.</p>
-                    </div>
-                    <button id="btn-refresh-vnc" class="btn btn-secondary btn-sm">Reload Screen Stream</button>
-                </div>
-                <div class="vnc-container">
-                    <iframe id="vnc-iframe" src="/vnc.html?autoconnect=true&resize=scale" frameborder="0"></iframe>
-                    <div class="vnc-fallback" id="vnc-fallback">
-                        <p>If the stream frame above doesn't load automatically, access noVNC directly at:</p>
-                        <a id="vnc-direct-link" href="#" target="_blank" class="vnc-link">Open Direct VNC Stream ↗</a>
                     </div>
                 </div>
             </section>
