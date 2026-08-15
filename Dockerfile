@@ -22,6 +22,9 @@ RUN apt-get update && apt-get install -y \
     libgtk-3-0 \
     && rm -rf /var/lib/apt/lists/*
 
+# Link index.html to vnc.html so visiting port 6080 directly loads the live screen stream
+RUN ln -sf /usr/share/novnc/vnc.html /usr/share/novnc/index.html
+
 # Install Google Chrome stable via direct deb package (bypasses deprecated apt-key)
 RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
     && apt-get update \
