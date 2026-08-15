@@ -77,10 +77,13 @@
             <!-- TAB 3: PROMPTS MANAGER -->
             <section id="tab-prompts" class="tab-pane">
                 <div class="card add-prompt-card">
-                    <h3>Add New Prompt</h3>
-                    <form id="add-prompt-form" class="prompt-form">
-                        <input type="text" id="input-new-prompt" placeholder="Enter image prompt details..." required>
-                        <button type="submit" class="btn btn-primary">Add Prompt</button>
+                    <h3>Add New Prompts (Single or Bulk)</h3>
+                    <p class="subtitle" style="margin-bottom: 12px;">Paste one or multiple prompts below (one prompt per line):</p>
+                    <form id="add-prompt-form" class="prompt-form" style="display: flex; flex-direction: column; gap: 12px;">
+                        <textarea id="input-new-prompt" rows="4" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); font-family: inherit; font-size: 14px; resize: vertical;" placeholder="Paste prompts here (one prompt per line)...&#10;Prompt 1: A vintage typography poster...&#10;Prompt 2: A minimalist logo design..." required></textarea>
+                        <div style="display: flex; justify: flex-end;">
+                            <button type="submit" class="btn btn-primary">Add Prompt(s)</button>
+                        </div>
                     </form>
                 </div>
 
