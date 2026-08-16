@@ -47,6 +47,32 @@ document.addEventListener('DOMContentLoaded', () => {
     const selectedCountSpan = document.getElementById('selected-count');
     const btnClearAllPrompts = document.getElementById('btn-clear-all-prompts');
 
+    // Modal Elements
+    const reasonModal = document.getElementById('reason-modal');
+    const modalPromptText = document.getElementById('modal-prompt-text');
+    const modalReasonText = document.getElementById('modal-reason-text');
+    const btnCloseModal = document.getElementById('btn-close-modal');
+    const btnModalOk = document.getElementById('btn-modal-ok');
+
+    function showReasonModal(promptText, reasonText) {
+        if (!reasonModal) return;
+        if (modalPromptText) modalPromptText.textContent = promptText || 'N/A';
+        if (modalReasonText) modalReasonText.textContent = reasonText || 'No detailed reasoning recorded for this item.';
+        reasonModal.style.display = 'flex';
+    }
+
+    function hideReasonModal() {
+        if (reasonModal) reasonModal.style.display = 'none';
+    }
+
+    if (btnCloseModal) btnCloseModal.addEventListener('click', hideReasonModal);
+    if (btnModalOk) btnModalOk.addEventListener('click', hideReasonModal);
+    if (reasonModal) {
+        reasonModal.addEventListener('click', (e) => {
+            if (e.target === reasonModal) hideReasonModal();
+        });
+    }
+
     // Settings Elements
     const settingsForm = document.getElementById('settings-form');
     const inputCliproxyKey = document.getElementById('setting-cliproxy-key');
@@ -284,14 +310,13 @@ document.addEventListener('DOMContentLoaded', () => {
         tableBody.innerHTML = filtered.map(p => {
             const statusClass = p.status ? p.status.toLowerCase() : 'pending';
             const statusLabel = p.status || 'Pending';
-            const reasonBtn = p.reason ? `<button class="btn btn-outline btn-sm btn-show-reason" style="margin-left: 6px; padding: 2px 6px; font-size: 11px;" data-reason="${escapeHtml(p.reason)}" data-prompt="${escapeHtml(p.prompt)}">🔍 Why?</button>` : '';
             return `
                 <tr>
                     <td style="text-align: center;"><input type="checkbox" class="chk-select-prompt" data-id="${p.id}"></td>
                     <td>${p.id + 1}</td>
                     <td><strong>${escapeHtml(p.prompt)}</strong></td>
                     <td><span class="badge ${statusClass}">${statusLabel}</span></td>
-                    <td>${p.score ? `${p.score}/10` : '-'}${reasonBtn}</td>
+                    <td>${p.score ? `${p.score}/10` : '-'}</td>
                     <td>${p.filename ? `<a href="/output_images/${p.filename}" target="_blank" class="vnc-link">${p.filename}</a>` : '-'}</td>
                     <td>${p.date || '-'}</td>
                     <td>
@@ -301,14 +326,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 </tr>
             `;
         }).join('');
-
-        document.querySelectorAll('.btn-show-reason').forEach(b => {
-            b.addEventListener('click', () => {
-                const promptText = b.getAttribute('data-prompt');
-                const reasonText = b.getAttribute('data-reason');
-                alert(`🤖 Vision LLM Evaluation Feedback:\n\nPrompt:\n"${promptText}"\n\nDetailed Reasoning:\n${reasonText}`);
-            });
-        });
 
         document.querySelectorAll('.chk-select-prompt').forEach(chk => {
             chk.addEventListener('change', updateSelectionState);
