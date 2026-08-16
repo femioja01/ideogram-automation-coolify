@@ -1,107 +1,99 @@
-"""
-FastAPI Control Center Backend for Ideogram Automation
-------------------------------------------------------
-Serves a dashboard UI, manages prompts.csv, executes background pipeline tasks,
-and streams real-time logs to the browser via WebSocket.
-"""
-
 import os
-import json
+import sys
 import asyncio
 import threading
+from collections import deque
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
-from fastapi import FastAPI, Request, HTTPException, Depends, status, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, HTTPException, Depends, Security
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel
 
 import main_drission as engine
 
 app = FastAPI(title="Ideogram Automation Control Center")
 
-# Mount static and output directories
 BASE_DIR = Path(__file__).parent
-app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
-app.mount("/output_images", StaticFiles(directory=engine.OUTPUT_DIR), name="output_images")
+TEMPLATES_DIR = BASE_DIR / "templates"
+STATIC_DIR = BASE_DIR / "static"
+OUTPUT_DIR = engine.OUTPUT_DIR
 
-templates = Jinja2Templates(directory=BASE_DIR / "templates")
+TEMPLATES_DIR.mkdir(exist_ok=True)
+STATIC_DIR.mkdir(exist_ok=True)
+OUTPUT_DIR.mkdir(exist_ok=True)
 
-# ── App State ─────────────────────────────────────────────────────────────────
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+app.mount("/output_images", StaticFiles(directory=str(OUTPUT_DIR)), name="output_images")
 
-class GlobalState:
+@app.middleware("http")
+async def add_no_cache_headers(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/static"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
+security = HTTPBasic(auto_error=False)
+BASIC_AUTH_USER = os.getenv("BASIC_AUTH_USERNAME", "").strip()
+BASIC_AUTH_PASS = os.getenv("BASIC_AUTH_PASSWORD", "").strip()
+
+def check_auth(credentials: Optional[HTTPBasicCredentials] = Security(security)):
+    if not BASIC_AUTH_USER or not BASIC_AUTH_PASS:
+        return True
+    if credentials and credentials.username == BASIC_AUTH_USER and credentials.password == BASIC_AUTH_PASS:
+        return True
+    raise HTTPException(
+        status_code=401,
+        detail="Unauthorized access",
+        headers={"WWW-Authenticate": "Basic"},
+    )
+
+class ExecutionState:
     def __init__(self):
-        self.status = "Idle" # Idle, Running, Stopping
-        self.logs: List[str] = []
-        self.active_websockets: List[WebSocket] = []
-        self.cancel_requested = False
+        self.status: str = "Idle"
+        self.current_prompt: str = ""
+        self.progress_current: int = 0
+        self.progress_total: int = 0
+        self.cancel_requested: bool = False
         self.worker_thread: Optional[threading.Thread] = None
+        self.log_history: deque = deque(maxlen=500)
+        self.active_websockets: List[WebSocket] = []
         self.loop: Optional[asyncio.AbstractEventLoop] = None
 
-state = GlobalState()
+state = ExecutionState()
 
 def broadcast_log(message: str):
-    """Callback function passed to pipeline to stream logs live."""
-    formatted_msg = f"{message}"
-    state.logs.append(formatted_msg)
-    if len(state.logs) > 500:
-        state.logs.pop(0)
-
-    print(formatted_msg, flush=True)
-
+    timestamped = message
+    state.log_history.append(timestamped)
+    print(timestamped, flush=True)
     if state.loop and state.active_websockets:
-        asyncio.run_coroutine_threadsafe(_async_broadcast(formatted_msg), state.loop)
+        asyncio.run_coroutine_threadsafe(_send_ws_log(timestamped), state.loop)
 
-async def _async_broadcast(message: str):
-    payload = json.dumps({"type": "log", "message": message, "status": state.status})
+async def _send_ws_log(message: str):
     disconnected = []
-    for ws in state.active_websockets:
+    for ws in list(state.active_websockets):
         try:
-            await ws.send_text(payload)
+            await ws.send_json({"type": "log", "message": message})
         except Exception:
             disconnected.append(ws)
     for ws in disconnected:
         if ws in state.active_websockets:
             state.active_websockets.remove(ws)
 
-# ── Authentication Helper ────────────────(Disabled for simple local use)
-def check_auth():
-    return True
-
-# ── Background Worker ─────────────────────────────────────────────────────────
-
-def run_worker_task(single_row_index: Optional[int] = None):
-    state.status = "Running"
-    state.cancel_requested = False
-    broadcast_log("[SYSTEM] Starting automation task...")
-
-    try:
-        engine.run_pipeline_sync(
-            log_callback=broadcast_log,
-            cancel_check=lambda: state.cancel_requested,
-            single_row_index=single_row_index
-        )
-    except Exception as e:
-        broadcast_log(f"[ERROR] Pipeline error: {e}")
-    finally:
-        state.status = "Idle"
-        state.cancel_requested = False
-        broadcast_log("[SYSTEM] Task finished. Status set to Idle.")
-
-def run_login_task():
-    state.status = "Running"
-    broadcast_log("[SYSTEM] Launching Ideogram interactive login in Chrome...")
-    try:
-        engine.login_and_save_session(log_fn=broadcast_log)
-        broadcast_log("[SYSTEM] Login Chrome session ready.")
-    except Exception as e:
-        broadcast_log(f"[ERROR] Login error: {e}")
-    finally:
-        state.status = "Idle"
-
-# ── Pydantic Schemas ──────────────────────────────────────────────────────────
+class SettingsUpdateRequest(BaseModel):
+    REPLICATE_API_TOKEN: Optional[str] = ""
+    SCORE_THRESHOLD: Optional[int] = 6
+    MAX_RETRIES: Optional[int] = 2
+    CLIPROXY_API_KEY: Optional[str] = ""
+    CLIPROXY_BASE_URL: Optional[str] = "https://cli-proxy-api.femioja.cfd"
+    CLIPROXY_MODEL: Optional[str] = "gemini-3.5-flash-low"
+    OPENAI_API_KEY: Optional[str] = ""
 
 class PromptAddRequest(BaseModel):
     prompt: str
@@ -115,19 +107,10 @@ class PromptDeleteRequest(BaseModel):
     id: int
 
 class PromptBulkDeleteRequest(BaseModel):
-    ids: list[int]
+    ids: List[int]
 
 class SingleRunRequest(BaseModel):
     id: int
-
-class SettingsUpdateRequest(BaseModel):
-    REPLICATE_API_TOKEN: Optional[str] = None
-    SCORE_THRESHOLD: Optional[int] = None
-    MAX_RETRIES: Optional[int] = None
-    CLIPROXY_API_KEY: Optional[str] = None
-    CLIPROXY_BASE_URL: Optional[str] = None
-    CLIPROXY_MODEL: Optional[str] = None
-    OPENAI_API_KEY: Optional[str] = None
 
 @app.on_event("startup")
 async def startup_event():
@@ -135,145 +118,217 @@ async def startup_event():
 
 @app.get("/", response_class=HTMLResponse)
 async def get_index(request: Request, authenticated: bool = Depends(check_auth)):
-    return templates.TemplateResponse("index.html", {"request": request})
+    response = templates.TemplateResponse("index.html", {"request": request})
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 @app.get("/api/status")
 async def get_status(authenticated: bool = Depends(check_auth)):
     rows = engine.read_prompts_csv()
     total = len(rows)
-    done = sum(1 for r in rows if r.get("status") == "Done")
-    failed = sum(1 for r in rows if r.get("status") == "Failed")
-    pending = total - done - failed
-
+    done = sum(1 for r in rows if r["status"] == "Done")
+    failed = sum(1 for r in rows if r["status"] == "Failed")
+    pending = sum(1 for r in rows if not r["status"])
+    
     image_files = list(engine.OUTPUT_DIR.glob("*.jpg")) + list(engine.OUTPUT_DIR.glob("*.png"))
 
     return {
         "status": state.status,
+        "current_prompt": state.current_prompt,
         "total_prompts": total,
         "done_count": done,
-        "pending_count": pending,
         "failed_count": failed,
+        "pending_count": pending,
         "image_count": len(image_files)
     }
-
-@app.get("/api/prompts")
-async def get_prompts(authenticated: bool = Depends(check_auth)):
-    return engine.read_prompts_csv()
-
-@app.post("/api/prompts/add")
-async def add_prompt(req: PromptAddRequest, authenticated: bool = Depends(check_auth)):
-    if not req.prompt.strip():
-        raise HTTPException(status_code=400, detail="Prompt text cannot be empty.")
-    success = engine.add_prompt_csv(req.prompt)
-    return {"success": success, "prompts": engine.read_prompts_csv()}
-
-@app.post("/api/prompts/update")
-async def update_prompt(req: PromptUpdateRequest, authenticated: bool = Depends(check_auth)):
-    success = engine.update_prompt_csv(req.id, prompt=req.prompt, status=req.status)
-    return {"success": success, "prompts": engine.read_prompts_csv()}
-
-@app.post("/api/prompts/delete")
-async def delete_prompt(req: PromptDeleteRequest, authenticated: bool = Depends(check_auth)):
-    success = engine.delete_prompt_csv(req.id)
-    return {"success": success, "prompts": engine.read_prompts_csv()}
-
-@app.post("/api/prompts/delete-bulk")
-async def delete_prompts_bulk(req: PromptBulkDeleteRequest, authenticated: bool = Depends(check_auth)):
-    count = engine.delete_multiple_prompts_csv(req.ids)
-    broadcast_log(f"[SYSTEM] Deleted {count} selected prompt(s) from database.")
-    return {"status": "success", "deleted_count": count, "prompts": engine.read_prompts_csv()}
-
-@app.post("/api/prompts/clear-all")
-async def clear_all_prompts(authenticated: bool = Depends(check_auth)):
-    engine.clear_all_prompts_csv()
-    broadcast_log("[SYSTEM] Cleared all prompts from database.")
-    return {"status": "success", "prompts": []}
-
-@app.post("/api/prompts/reset-failed")
-async def reset_failed_prompts(authenticated: bool = Depends(check_auth)):
-    reset_count = engine.reset_failed_prompts()
-    broadcast_log(f"[SYSTEM] Reset {reset_count} failed prompt(s) back to pending.")
-    return {"reset_count": reset_count}
-
-@app.post("/api/run")
-async def trigger_run_all(authenticated: bool = Depends(check_auth)):
-    if state.status == "Running":
-        return JSONResponse({"status": "already_running", "message": "Automation is already running."})
-    state.worker_thread = threading.Thread(target=run_worker_task, daemon=True)
-    state.worker_thread.start()
-    return {"status": "started", "message": "Batch automation started."}
-
-@app.post("/api/run-single")
-async def trigger_run_single(req: SingleRunRequest, authenticated: bool = Depends(check_auth)):
-    if state.status == "Running":
-        return JSONResponse({"status": "already_running", "message": "Automation is already running."})
-    state.worker_thread = threading.Thread(target=run_worker_task, args=(req.id,), daemon=True)
-    state.worker_thread.start()
-    return {"status": "started", "message": f"Single run started for prompt #{req.id + 1}."}
-
-@app.post("/api/stop")
-async def trigger_stop(authenticated: bool = Depends(check_auth)):
-    if state.status != "Running":
-        return {"status": "not_running", "message": "No task is currently running."}
-    state.cancel_requested = True
-    state.status = "Stopping"
-    broadcast_log("[SYSTEM] Cancellation requested by user...")
-    return {"status": "stopping", "message": "Cancellation request sent."}
-
-@app.post("/api/login")
-async def trigger_login(authenticated: bool = Depends(check_auth)):
-    if state.status == "Running":
-        return JSONResponse({"status": "already_running", "message": "Automation is currently running."})
-    state.worker_thread = threading.Thread(target=run_login_task, daemon=True)
-    state.worker_thread.start()
-    return {"status": "started", "message": "Chrome login session window opened."}
-
-@app.get("/api/gallery")
-async def get_gallery(authenticated: bool = Depends(check_auth)):
-    prompts = engine.read_prompts_csv()
-    prompt_by_filename = {p["filename"]: p for p in prompts if p["filename"]}
-    images = []
-    for file in sorted(engine.OUTPUT_DIR.glob("*.*"), key=os.path.getmtime, reverse=True):
-        if file.suffix.lower() in [".jpg", ".jpeg", ".png", ".webp"]:
-            csv_meta = prompt_by_filename.get(file.name, {})
-            images.append({
-                "filename": file.name,
-                "url": f"/output_images/{file.name}",
-                "size_kb": round(file.stat().st_size / 1024, 1),
-                "modified": file.stat().st_mtime,
-                "prompt": csv_meta.get("prompt", file.stem),
-                "score": csv_meta.get("score", "N/A"),
-                "date": csv_meta.get("date", "")
-            })
-    return images
 
 @app.get("/api/settings")
 async def get_settings(authenticated: bool = Depends(check_auth)):
     return engine.load_settings()
 
 @app.post("/api/settings")
-async def update_settings(req: SettingsUpdateRequest, authenticated: bool = Depends(check_auth)):
-    new_data = req.dict(exclude_unset=True)
-    updated = engine.save_settings(new_data)
-    broadcast_log(f"[SYSTEM] Settings updated: {updated}")
-    return updated
+async def update_settings(payload: SettingsUpdateRequest, authenticated: bool = Depends(check_auth)):
+    updated = engine.save_settings(payload.dict())
+    broadcast_log(f"[SYSTEM] Settings updated: Threshold={updated.get('SCORE_THRESHOLD')}, MaxRetries={updated.get('MAX_RETRIES')}")
+    return {"success": True, "settings": updated}
+
+@app.get("/api/prompts")
+async def get_prompts(authenticated: bool = Depends(check_auth)):
+    return engine.read_prompts_csv()
+
+@app.post("/api/prompts/add")
+async def add_prompt(payload: PromptAddRequest, authenticated: bool = Depends(check_auth)):
+    if not payload.prompt.strip():
+        raise HTTPException(status_code=400, detail="Prompt cannot be empty")
+    ok = engine.add_prompt_csv(payload.prompt)
+    if ok:
+        broadcast_log(f"[SYSTEM] Prompt added: '{payload.prompt[:40]}...'")
+        return {"success": True, "prompts": engine.read_prompts_csv()}
+    raise HTTPException(status_code=500, detail="Could not save prompt to CSV")
+
+@app.post("/api/prompts/update")
+async def update_prompt(payload: PromptUpdateRequest, authenticated: bool = Depends(check_auth)):
+    ok = engine.update_prompt_csv(payload.id, prompt=payload.prompt, status=payload.status)
+    if ok:
+        return {"success": True, "prompts": engine.read_prompts_csv()}
+    raise HTTPException(status_code=404, detail="Prompt index out of range")
+
+@app.post("/api/prompts/delete")
+async def delete_prompt(payload: PromptDeleteRequest, authenticated: bool = Depends(check_auth)):
+    ok = engine.delete_prompt_csv(payload.id)
+    if ok:
+        return {"success": True, "prompts": engine.read_prompts_csv()}
+    raise HTTPException(status_code=404, detail="Prompt index out of range")
+
+@app.post("/api/prompts/delete-bulk")
+async def delete_bulk_prompts(payload: PromptBulkDeleteRequest, authenticated: bool = Depends(check_auth)):
+    deleted_count = engine.delete_multiple_prompts_csv(payload.ids)
+    broadcast_log(f"[SYSTEM] Bulk deleted {deleted_count} prompt(s) from database.")
+    return {"success": True, "deleted_count": deleted_count, "prompts": engine.read_prompts_csv()}
+
+@app.post("/api/prompts/clear-all")
+async def clear_all_prompts(authenticated: bool = Depends(check_auth)):
+    ok = engine.clear_all_prompts_csv()
+    broadcast_log("[SYSTEM] Cleared all prompts from database.")
+    return {"success": True, "prompts": []}
+
+@app.post("/api/prompts/reset-failed")
+async def reset_failed_prompts(authenticated: bool = Depends(check_auth)):
+    reset_count = engine.reset_failed_prompts()
+    broadcast_log(f"[SYSTEM] Reset {reset_count} failed prompt(s) back to pending.")
+    return {"success": True, "reset_count": reset_count, "prompts": engine.read_prompts_csv()}
+
+@app.post("/api/prompts/reset-all")
+async def reset_all_prompts_pending(authenticated: bool = Depends(check_auth)):
+    reset_count = engine.reset_all_prompts_pending()
+    broadcast_log(f"[SYSTEM] Reset {reset_count} prompt(s) back to pending.")
+    return {"reset_count": reset_count, "prompts": engine.read_prompts_csv()}
+
+@app.post("/api/run")
+async def trigger_run(authenticated: bool = Depends(check_auth)):
+    if state.status == "Running":
+        return {"status": "already_running", "message": "Automation is already running."}
+
+    state.status = "Running"
+    state.cancel_requested = False
+
+    def worker():
+        try:
+            broadcast_log("[SYSTEM] Background automation task started.")
+            engine.run_pipeline_sync(
+                log_callback=broadcast_log,
+                cancel_check=lambda: state.cancel_requested
+            )
+        except Exception as e:
+            broadcast_log(f"[ERROR] Automation task error: {e}")
+        finally:
+            state.status = "Idle"
+            broadcast_log("[SYSTEM] Task finished. Status set to Idle.")
+
+    state.worker_thread = threading.Thread(target=worker, daemon=True)
+    state.worker_thread.start()
+
+    return {"status": "started", "message": "Batch automation started."}
+
+@app.post("/api/run-single")
+async def trigger_run_single(payload: SingleRunRequest, authenticated: bool = Depends(check_auth)):
+    if state.status == "Running":
+        return {"status": "already_running", "message": "Automation is already running."}
+
+    state.status = "Running"
+    state.cancel_requested = False
+
+    def worker():
+        try:
+            broadcast_log(f"[SYSTEM] Starting single prompt run for row index {payload.id}...")
+            engine.run_pipeline_sync(
+                log_callback=broadcast_log,
+                cancel_check=lambda: state.cancel_requested,
+                single_row_index=payload.id
+            )
+        except Exception as e:
+            broadcast_log(f"[ERROR] Single prompt task error: {e}")
+        finally:
+            state.status = "Idle"
+            broadcast_log("[SYSTEM] Task finished. Status set to Idle.")
+
+    state.worker_thread = threading.Thread(target=worker, daemon=True)
+    state.worker_thread.start()
+
+    return {"status": "started", "message": f"Single prompt run started for row {payload.id + 1}."}
+
+@app.post("/api/stop")
+async def trigger_stop(authenticated: bool = Depends(check_auth)):
+    if state.status != "Running":
+        return {"status": "not_running", "message": "Automation is not running."}
+
+    state.cancel_requested = True
+    state.status = "Stopping"
+    broadcast_log("[SYSTEM] Cancellation requested by user...")
+    return {"status": "stopping", "message": "Stop request sent to automation engine."}
+
+@app.post("/api/login")
+async def trigger_login(authenticated: bool = Depends(check_auth)):
+    if state.status == "Running":
+        return {"status": "busy", "message": "Cannot launch login window while automation is running."}
+
+    state.status = "Running"
+    def login_worker():
+        try:
+            broadcast_log("[SYSTEM] Opening Ideogram login window...")
+            engine.login_and_save_session(log_fn=broadcast_log)
+        except Exception as e:
+            broadcast_log(f"[ERROR] Login window error: {e}")
+        finally:
+            state.status = "Idle"
+            broadcast_log("[SYSTEM] Login session task completed.")
+
+    t = threading.Thread(target=login_worker, daemon=True)
+    t.start()
+    return {"status": "started", "message": "Login window launched on Mac desktop."}
+
+@app.get("/api/gallery")
+async def get_gallery(authenticated: bool = Depends(check_auth)):
+    output_files = list(engine.OUTPUT_DIR.glob("*.jpg")) + list(engine.OUTPUT_DIR.glob("*.png"))
+    output_files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+
+    rows = engine.read_prompts_csv()
+    filename_map = {r["filename"]: r for r in rows if r.get("filename")}
+
+    gallery = []
+    for f in output_files:
+        meta = filename_map.get(f.name, {})
+        gallery.append({
+            "filename": f.name,
+            "url": f"/output_images/{f.name}",
+            "prompt": meta.get("prompt", f.stem),
+            "score": meta.get("score", "N/A"),
+            "date": meta.get("date", ""),
+            "size_kb": round(f.stat().st_size / 1024, 1)
+        })
+
+    return gallery
 
 @app.websocket("/ws/logs")
 async def websocket_logs(websocket: WebSocket):
     await websocket.accept()
     state.active_websockets.append(websocket)
     try:
-        await websocket.send_text(json.dumps({
+        await websocket.send_json({
             "type": "history",
-            "logs": state.logs,
-            "status": state.status
-        }))
+            "logs": list(state.log_history)
+        })
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
         if websocket in state.active_websockets:
             state.active_websockets.remove(websocket)
+    except Exception:
+        if websocket in state.active_websockets:
+            state.active_websockets.remove(websocket)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
